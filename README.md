@@ -150,15 +150,33 @@ Validation errors (400) include a `fieldErrors` map:
 
 ---
 
-## Deployment — Render + Supabase
+## Deployment — Render (Docker) + Supabase
+
+The app is deployed to Render as a **Docker** web service. The multi-stage
+`Dockerfile` builds the jar with the Maven wrapper (Java 21 JDK) and runs it on a
+slim JRE image — no native Java buildpack required.
 
 ### Render Web Service Configuration
 
 | Setting | Value |
 |---|---|
-| Build Command | `./mvnw clean package -DskipTests` |
-| Start Command | `java -jar target/*.jar` |
+| Runtime | `Docker` (auto-detected from `Dockerfile`) |
+| Branch | `master` |
+| Build / Start Command | *(leave blank — the `Dockerfile` handles both)* |
 | Environment | `SPRING_PROFILES_ACTIVE=prod` |
+
+> The container exposes the app via Spring's `${PORT:8080}` (`application.yml`),
+> so Render's injected `PORT` is used automatically — do **not** set `PORT` manually.
+
+### Build & run the container locally
+
+```bash
+# Build the image
+docker build -t nayepankh-vims .
+
+# Run it (dev profile, H2 in-memory)
+docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=dev nayepankh-vims
+```
 
 ### Required Environment Variables
 
@@ -195,6 +213,8 @@ Render's free tier spins down the service after inactivity. The first request af
 ## Project Structure
 
 ```
+Dockerfile                        # Multi-stage build (JDK build → JRE runtime)
+.dockerignore                     # Excludes target/, .git, IDE files from build context
 src/main/java/com/nayepankh/vims/
 ├── VimsApplication.java          # Entry point
 ├── config/

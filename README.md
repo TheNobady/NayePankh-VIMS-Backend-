@@ -218,6 +218,3 @@ src/main/java/com/nayepankh/vims/
 
 ---
 
-## License
-
-MIT

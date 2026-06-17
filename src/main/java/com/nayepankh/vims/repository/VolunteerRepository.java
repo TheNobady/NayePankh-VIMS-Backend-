@@ -20,11 +20,16 @@ public interface VolunteerRepository extends JpaRepository<Volunteer, Long> {
 
     long countByStatus(VolunteerStatus status);
 
+    // The CAST(... AS string) calls give PostgreSQL an explicit type for the
+    // nullable bind parameters. Without them, a null :city / :skill is sent as an
+    // untyped NULL, which PostgreSQL infers as bytea — producing
+    // "function lower(bytea) does not exist". (H2 in dev tolerates the untyped
+    // null, which is why this only surfaced against PostgreSQL in production.)
     @Query("""
            SELECT v FROM Volunteer v
-           WHERE (:city IS NULL OR LOWER(v.city) = LOWER(:city))
+           WHERE (:city IS NULL OR LOWER(v.city) = LOWER(CAST(:city AS string)))
              AND (:status IS NULL OR v.status = :status)
-             AND (:skill IS NULL OR LOWER(v.skills) LIKE LOWER(CONCAT('%', :skill, '%')))
+             AND (:skill IS NULL OR LOWER(v.skills) LIKE LOWER(CONCAT('%', CAST(:skill AS string), '%')))
            """)
     Page<Volunteer> findWithFilters(
             @Param("city") String city,

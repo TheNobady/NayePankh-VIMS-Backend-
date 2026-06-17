@@ -1,240 +1,138 @@
-# NayePankh VIMS — Volunteer Information Management System
+# NayePankh VIMS — Backend
 
-REST API backend for **NayePankh Foundation** — a registered Indian NGO running food drives, clothing distribution, health-awareness campaigns, and education initiatives.
+This is the backend for **NayePankh Foundation**, an Indian NGO that runs food
+drives, clothing distribution, health-awareness campaigns, and education programs.
 
-This backend is the **single source of truth** consumed by:
-- 📱 **Android app** (Kotlin, Jetpack Compose, Retrofit) — volunteer-facing
-- 🖥️ **Java Swing desktop app** — staff/admin-facing
+It's a REST API that keeps track of **volunteers**, **campaigns**, and who
+**signed up** for what. Two apps talk to it:
 
----
+- 📱 an **Android app** for volunteers
+- 🖥️ a **Java Swing desktop app** for staff (see the `Java/` project)
 
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Java 21 (LTS) |
-| Framework | Spring Boot 3.4.5 |
-| Build | Maven (`./mvnw`) |
-| ORM | Spring Data JPA + Hibernate |
-| Validation | Jakarta Bean Validation |
-| Database (dev) | H2 in-memory |
-| Database (prod) | PostgreSQL (Supabase) |
-| API Docs | springdoc-openapi (Swagger UI) |
+**Live API:** https://nayepankh-vims-backend.onrender.com
 
 ---
 
-## Quick Start (Local Development)
+## What's under the hood
 
-### Prerequisites
-- Java 21+
-- Git
+Java 21 · Spring Boot 3.4.5 · Spring Data JPA · H2 (local) / PostgreSQL (live) ·
+Swagger for docs. Built with Maven.
 
-### Run
+---
+
+## Run it locally
+
+You just need **Java 21**. Then:
+
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd Backend
-
-# Run with dev profile (H2 in-memory DB, seed data auto-loaded)
 ./mvnw spring-boot:run
 ```
 
-The app starts on `http://localhost:8080` with the `dev` profile by default.
+That's it — it starts on `http://localhost:8080` using an in-memory H2 database
+that's wiped and re-seeded every restart (5 volunteers, 5 campaigns, a handful of
+sign-ups), so you always have something to play with.
 
-### Key URLs (dev)
-| URL | Description |
+Handy links once it's running:
+
+- **API docs (try it live):** http://localhost:8080/swagger-ui.html
+- **Database console:** http://localhost:8080/h2-console (JDBC URL `jdbc:h2:mem:vimsdb`)
+
+---
+
+## The API
+
+Everything lives under `/api/v1`. List endpoints support paging and sorting like
+`?page=0&size=20&sort=name,asc`.
+
+**Volunteers**
+- `POST /volunteers` — add one
+- `GET /volunteers` — list (filter by `city`, `skill`, `status`)
+- `GET /volunteers/{id}` — one volunteer
+- `PUT /volunteers/{id}` — edit
+- `PATCH /volunteers/{id}/status` — activate / deactivate
+- `GET /volunteers/{id}/campaigns` — what they've signed up for
+- `GET /volunteers/{id}/summary` — their hours & campaign counts
+
+**Campaigns**
+- `POST /campaigns` — create
+- `GET /campaigns` — list (filter by `status`, `type`, `upcoming`)
+- `GET /campaigns/{id}` — details + how many enrolled
+- `PUT /campaigns/{id}` — edit
+- `PATCH /campaigns/{id}/status` — change status
+- `GET /campaigns/{id}/volunteers` — who's enrolled
+- `GET /campaigns/{id}/report` — attendance & hours
+
+**Enrollments**
+- `POST /enrollments` — sign a volunteer up
+- `PATCH /enrollments/{id}/attendance` — mark attendance + log hours
+- `DELETE /enrollments/{id}` — cancel (it's a soft cancel, not a real delete)
+
+**Dashboard**
+- `GET /dashboard/summary` — the headline numbers
+
+When something goes wrong you get a clean JSON error with a `message`, and for
+bad form input a `fieldErrors` map telling you which field was off.
+
+---
+
+## The rules it enforces
+
+- A campaign can't take more people than its capacity.
+- You can't sign the same volunteer up for the same campaign twice.
+- You can only enroll in campaigns that are upcoming or active, and only active
+  volunteers.
+- Volunteers are never truly deleted — they're just set to inactive.
+- Hours only count once a sign-up is marked **attended**.
+- A new campaign's date has to be today or later.
+
+---
+
+## Going live (Render + Supabase)
+
+The app ships as a **Docker** image (see the `Dockerfile`), so Render just builds
+and runs it — no special setup. On Render, pick the **Docker** runtime, leave the
+build/start commands blank, and set these environment variables:
+
+| Variable | What it is |
 |---|---|
-| `http://localhost:8080/swagger-ui.html` | Swagger UI — interactive API docs |
-| `http://localhost:8080/h2-console` | H2 Database console (JDBC URL: `jdbc:h2:mem:vimsdb`) |
-| `http://localhost:8080/api/v1/volunteers` | Volunteers API |
-| `http://localhost:8080/api/v1/campaigns` | Campaigns API |
-| `http://localhost:8080/api/v1/enrollments` | Enrollments API |
-| `http://localhost:8080/api/v1/dashboard/summary` | Dashboard summary |
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `SPRING_DATASOURCE_URL` | your Postgres JDBC URL |
+| `SPRING_DATASOURCE_USERNAME` | DB user |
+| `SPRING_DATASOURCE_PASSWORD` | DB password |
 
-### Seed Data
-On the `dev` profile, the app auto-seeds:
-- 5 volunteers (various cities, skills, statuses)
-- 5 campaigns (all types, mix of UPCOMING/ACTIVE/COMPLETED)
-- 11 enrollments (REGISTERED, ATTENDED with hours, NO_SHOW, CANCELLED)
+Don't set `PORT` — Render fills that in automatically.
 
----
-
-## Spring Profiles
-
-| Profile | DB | DDL | SQL Logging | H2 Console |
-|---|---|---|---|---|
-| `dev` (default) | H2 in-memory | `create-drop` | ✅ | ✅ |
-| `prod` | PostgreSQL (Supabase) | `update` | ❌ | ❌ |
-
----
-
-## API Contract
-
-**Base path:** `/api/v1`
-
-All list endpoints support **pagination + sorting** via Spring Data `Pageable`:
-```
-?page=0&size=20&sort=name,asc
-```
-
-### Volunteers
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/volunteers` | Register a new volunteer |
-| `GET` | `/volunteers` | List volunteers (filters: `city`, `skill`, `status`) |
-| `GET` | `/volunteers/{id}` | Get volunteer by ID |
-| `PUT` | `/volunteers/{id}` | Update volunteer details |
-| `PATCH` | `/volunteers/{id}/status` | Activate/deactivate a volunteer |
-| `GET` | `/volunteers/{id}/campaigns` | List volunteer's enrollments |
-| `GET` | `/volunteers/{id}/summary` | Get volunteer stats (hours, campaigns) |
-
-### Campaigns
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/campaigns` | Create a new campaign |
-| `GET` | `/campaigns` | List campaigns (filters: `status`, `type`, `upcoming`) |
-| `GET` | `/campaigns/{id}` | Get campaign details + enrollment counts |
-| `PUT` | `/campaigns/{id}` | Update campaign details |
-| `PATCH` | `/campaigns/{id}/status` | Update campaign status |
-| `GET` | `/campaigns/{id}/volunteers` | List enrolled volunteers |
-| `GET` | `/campaigns/{id}/report` | Get campaign report (attendance, hours) |
-
-### Enrollments
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/enrollments` | Enroll a volunteer in a campaign |
-| `PATCH` | `/enrollments/{id}/attendance` | Update attendance + hours |
-| `DELETE` | `/enrollments/{id}` | Cancel enrollment (soft-delete) |
-
-### Dashboard
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/dashboard/summary` | Aggregate dashboard stats |
-
-### Error Response Format
-All errors follow a consistent shape:
-```json
-{
-  "timestamp": "2026-06-16T06:00:00Z",
-  "status": 409,
-  "error": "Conflict",
-  "message": "Campaign is at capacity",
-  "path": "/api/v1/enrollments"
-}
-```
-Validation errors (400) include a `fieldErrors` map:
-```json
-{
-  "timestamp": "...",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Validation failed",
-  "path": "/api/v1/volunteers",
-  "fieldErrors": {
-    "email": "Must be a valid email address",
-    "name": "Name is required"
-  }
-}
-```
-
----
-
-## Business Rules
-
-1. **Enrollment capacity** — 409 Conflict if campaign is at capacity (REGISTERED + ATTENDED ≥ capacity)
-2. **Duplicate enrollment** — 409 Conflict if non-cancelled enrollment exists for the same (volunteer, campaign)
-3. **Enrollment eligibility** — 400 if campaign is not UPCOMING/ACTIVE or volunteer is INACTIVE
-4. **Soft delete** — Volunteers are deactivated (INACTIVE), never hard-deleted
-5. **Hours logging** — `hoursLogged` can only be set when enrollment status is ATTENDED
-6. **Campaign date** — `eventDate` must be today or future at creation time
-
----
-
-## Deployment — Render (Docker) + Supabase
-
-The app is deployed to Render as a **Docker** web service. The multi-stage
-`Dockerfile` builds the jar with the Maven wrapper (Java 21 JDK) and runs it on a
-slim JRE image — no native Java buildpack required.
-
-### Render Web Service Configuration
-
-| Setting | Value |
-|---|---|
-| Runtime | `Docker` (auto-detected from `Dockerfile`) |
-| Branch | `master` |
-| Build / Start Command | *(leave blank — the `Dockerfile` handles both)* |
-| Environment | `SPRING_PROFILES_ACTIVE=prod` |
-
-> The container exposes the app via Spring's `${PORT:8080}` (`application.yml`),
-> so Render's injected `PORT` is used automatically — do **not** set `PORT` manually.
-
-### Build & run the container locally
+Want to test the image locally first?
 
 ```bash
-# Build the image
 docker build -t nayepankh-vims .
-
-# Run it (dev profile, H2 in-memory)
 docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=dev nayepankh-vims
 ```
 
-### Required Environment Variables
+**Two things that will bite you with Supabase:**
 
-| Variable | Description | Example |
-|---|---|---|
-| `SPRING_PROFILES_ACTIVE` | Spring profile | `prod` |
-| `SPRING_DATASOURCE_URL` | JDBC connection string | `jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require` |
-| `SPRING_DATASOURCE_USERNAME` | DB username | `postgres.<project-ref>` |
-| `SPRING_DATASOURCE_PASSWORD` | DB password | `<your-db-password>` |
-| `PORT` | Server port (auto-set by Render) | `10000` |
-| `APP_CORS_ALLOWED_ORIGINS` | Allowed CORS origins (optional) | `https://your-app.com` |
+1. Use the **connection pooler** URL (`aws-0-<region>.pooler.supabase.com:5432`),
+   not the direct `db.<ref>.supabase.co` one — the direct one is IPv6-only and
+   Render can't reach it. Add `?sslmode=require` on the end.
+2. The username must include your project ref: `postgres.<project-ref>`, not just
+   `postgres`.
 
-### ⚠️ Supabase Connection — IPv4/IPv6 Gotcha
-
-Supabase's **direct** connection string (`db.<ref>.supabase.co:5432`) is **IPv6-only** on free projects. Render's free tier is **IPv4-only**, so direct connections will **silently fail**.
-
-**Solution:** Use the Supabase **Connection Pooler (Supavisor)** — it provides an IPv4 endpoint:
-
-```
-jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
-```
-
-Key points:
-- ✅ Use **session mode (port 5432)** for JPA/Hibernate
-- ✅ Username includes the project ref: `postgres.<project-ref>` (not plain `postgres`)
-- ✅ Append `?sslmode=require`
-- ⚠️ If using **transaction mode (port 6543)**, disable prepared-statement caching — session mode is simpler
-
-### Cold Start Note
-Render's free tier spins down the service after inactivity. The first request after idle will have a cold-start delay (~30-60s). Clients should handle this with appropriate timeouts.
+Also note: Render's free tier sleeps when idle, so the first request after a quiet
+spell takes ~30–60s to wake up. That's normal.
 
 ---
 
-## Project Structure
+## How the code is laid out
 
 ```
-Dockerfile                        # Multi-stage build (JDK build → JRE runtime)
-.dockerignore                     # Excludes target/, .git, IDE files from build context
 src/main/java/com/nayepankh/vims/
-├── VimsApplication.java          # Entry point
-├── config/
-│   ├── CorsConfig.java           # CORS policy (env-configurable)
-│   ├── DataSeeder.java           # Dev seed data
-│   └── OpenApiConfig.java        # Swagger metadata
-├── controller/
-│   ├── CampaignController.java   # /api/v1/campaigns
-│   ├── DashboardController.java  # /api/v1/dashboard
-│   ├── EnrollmentController.java # /api/v1/enrollments
-│   └── VolunteerController.java  # /api/v1/volunteers
-├── dto/
-│   ├── request/                  # Incoming DTOs with validation
-│   └── response/                 # Outgoing DTOs
-├── entity/                       # JPA entities + enums
-├── exception/                    # Custom exceptions + global handler
-├── mapper/                       # Entity ↔ DTO mapping
-├── repository/                   # Spring Data JPA interfaces
-└── service/                      # Business logic
+├── VimsApplication.java   # starts everything
+├── config/                # CORS, Swagger, dev seed data
+├── controller/            # the HTTP endpoints
+├── dto/                   # request/response shapes
+├── entity/                # database tables + enums
+├── exception/             # error handling
+├── mapper/                # entity ↔ dto conversion
+├── repository/            # database queries
+└── service/               # the actual logic
 ```
-
----
-
